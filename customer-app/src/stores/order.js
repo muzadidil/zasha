@@ -10,6 +10,7 @@ export const useOrderStore = defineStore('order', {
     partnerLocation: null,
     expiresAt: null,
     channel: null,
+    lastClaimAt: null,
   }),
 
   actions: {
@@ -46,7 +47,10 @@ export const useOrderStore = defineStore('order', {
         this.activeRadiusKm = e.active_radius_km;
         this.currentStepIndex = e.current_step_index;
       });
-      this.channel.listen('.OrderClaimed', () => this.load(orderId));
+      this.channel.listen('.OrderClaimed', () => {
+        this.lastClaimAt = Date.now();
+        this.load(orderId);
+      });
       this.channel.listen('.OrderCancelled', () => this.load(orderId));
       this.channel.listen('.OrderExpired', () => this.load(orderId));
       this.channel.listen('.OrderStatusChanged', () => this.load(orderId));

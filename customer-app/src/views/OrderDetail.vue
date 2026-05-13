@@ -1,11 +1,13 @@
 <script setup>
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import api from '../api';
 import OsmMap from '../components/OsmMap.vue';
 import { useAuthStore } from '../stores/auth';
 import { useCategoriesStore } from '../stores/categories';
 import { useOrderStore } from '../stores/order';
+
+const RACE_WINDOW_MS = 10_000;
 
 const route = useRoute();
 const router = useRouter();
@@ -16,6 +18,9 @@ const error = ref('');
 const acting = ref(false);
 const rating = reactive({ stars: 5, comment: '', submitted: false, error: '' });
 const now = ref(Date.now());
+const isExpiredOptimistic = ref(false);
+const optimisticExpiredAt = ref(null);
+const showLateClaimModal = ref(false);
 let tickInterval = null;
 
 const order = computed(() => orderStore.currentOrder);
@@ -32,10 +37,37 @@ const isExpired = computed(() => order.value?.status === 'expired');
 const isCancelled = computed(() => order.value?.status === 'cancelled');
 const canRate = computed(() => order.value?.status === 'completed' && !rating.submitted);
 
+// Show the expired modal as soon as the local countdown hits 0, even before the
+// backend `orders:expire` scheduler fires (it runs every 10s). The lateClaim
+// watcher below rolls this back if an OrderClaimed event sneaks in during the
+// race window — partner can legitimately win the race at second 59.
+const showExpiredModal = computed(() => (isExpired.value || isExpiredOptimistic.value) && !showLateClaimModal.value);
+
 const secondsLeft = computed(() => {
   if (!order.value?.expires_at) return null;
   const diff = Math.floor((new Date(order.value.expires_at).getTime() - now.value) / 1000);
   return diff > 0 ? diff : 0;
+});
+
+// Flip optimistic expire when the local countdown drops to 0 while still
+// searching. We only set it once — the OrderClaimed watcher decides whether to
+// roll it back.
+watch(secondsLeft, (s) => {
+  if (s === 0 && isSearching.value && !isExpiredOptimistic.value) {
+    isExpiredOptimistic.value = true;
+    optimisticExpiredAt.value = Date.now();
+  }
+});
+
+// Roll back the optimistic expired modal if a late OrderClaimed event arrives
+// within the race window. We rely on the store recording the event time and
+// then re-fetching the order (so partner info is populated).
+watch(() => orderStore.lastClaimAt, (claimedAt) => {
+  if (!claimedAt || !optimisticExpiredAt.value) return;
+  if (claimedAt - optimisticExpiredAt.value <= RACE_WINDOW_MS) {
+    isExpiredOptimistic.value = false;
+    showLateClaimModal.value = true;
+  }
 });
 
 async function increasePrice() {
@@ -181,9 +213,9 @@ onUnmounted(() => {
     <p v-if="rating.submitted" class="text-emerald-600 text-sm">Terima kasih, rating sudah dikirim.</p>
     <p v-if="error" class="text-rose-600 text-sm">{{ error }}</p>
 
-    <!-- Expired modal -->
+    <!-- Expired modal (optimistic or backend-confirmed) -->
     <Transition name="fade">
-      <div v-if="isExpired" class="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50">
+      <div v-if="showExpiredModal" class="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50">
         <div class="bg-white rounded-lg shadow-xl max-w-sm w-full p-6 space-y-3">
           <div class="text-center">
             <div class="text-4xl">😕</div>
@@ -197,6 +229,26 @@ onUnmounted(() => {
           </button>
           <button @click="router.push('/')" class="w-full border border-slate-300 text-slate-700 rounded py-2.5">
             Kembali ke Home
+          </button>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Late-claim modal: shown when a partner won the race within the race window
+         after we already flipped to optimistic expired. -->
+    <Transition name="fade">
+      <div v-if="showLateClaimModal" class="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-lg shadow-xl max-w-sm w-full p-6 space-y-3">
+          <div class="text-center">
+            <div class="text-4xl">🎉</div>
+            <h2 class="text-lg font-semibold mt-2">
+              Order diambil oleh {{ order?.partner?.name ?? 'mitra' }}!
+            </h2>
+            <p class="text-sm text-slate-500 mt-1">Mitra menerima order di detik terakhir.</p>
+          </div>
+          <button @click="showLateClaimModal = false"
+                  class="w-full bg-indigo-600 text-white rounded py-2.5 font-semibold">
+            Lihat detail mitra
           </button>
         </div>
       </div>
