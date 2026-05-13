@@ -42,7 +42,20 @@ it('broadcasts OrderAvailableForPartner + OrderRadiusExpanded when a Titip order
     // The test partner is at the pickup point, so step 0 (1km radius) must reach them.
     Event::assertDispatched(
         OrderAvailableForPartner::class,
-        fn ($e) => $e->order->id === $orderId && $e->partner->id === $testPartner->id,
+        function ($e) use ($orderId, $testPartner, $customer) {
+            if ($e->order->id !== $orderId || $e->partner->id !== $testPartner->id) {
+                return false;
+            }
+            // Payload must carry customer info so the mitra feed can render
+            // name + stars without an extra round-trip.
+            $payload = $e->broadcastWith();
+            expect($payload['customer'])->not->toBeNull();
+            expect($payload['customer']['name'])->toBe($customer->name);
+            expect($payload['customer'])->toHaveKey('average_rating');
+            expect($payload['customer'])->toHaveKey('rating_count');
+
+            return true;
+        },
     );
 
     Event::assertDispatched(OrderRadiusExpanded::class, fn ($e) => $e->order->id === $orderId);

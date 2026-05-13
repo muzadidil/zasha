@@ -33,7 +33,7 @@ class OrderController extends Controller
     public function history(Request $request): JsonResponse
     {
         $orders = Order::query()
-            ->with('serviceCategory')
+            ->with(['serviceCategory', 'customer'])
             ->where('partner_id', $request->user()->id)
             ->orderByDesc('claimed_at')
             ->paginate(20);
@@ -53,7 +53,7 @@ class OrderController extends Controller
         $order = $this->findPartnerOrderOrFail($id, $request);
 
         return response()->json([
-            'data' => OrderResource::make($order->load('serviceCategory')),
+            'data' => OrderResource::make($order->load(['serviceCategory', 'customer'])),
         ]);
     }
 
@@ -62,7 +62,7 @@ class OrderController extends Controller
         $order = $this->orderClaimService->claim($id, $request->user());
 
         return response()->json([
-            'data' => OrderResource::make($order->load('serviceCategory')),
+            'data' => OrderResource::make($order->load(['serviceCategory', 'customer'])),
         ]);
     }
 

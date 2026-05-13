@@ -40,6 +40,8 @@ class OrderAvailableForPartner implements ShouldBroadcast
      */
     public function broadcastWith(): array
     {
+        $customer = $this->order->customer;
+
         return [
             'order_id' => $this->order->id,
             'category' => $this->order->serviceCategory->slug,
@@ -48,6 +50,11 @@ class OrderAvailableForPartner implements ShouldBroadcast
             'pickup' => $this->order->pickupLatLng(),
             'distance_km' => $this->order->active_radius_km,
             'expires_at' => $this->order->expires_at?->toIso8601String(),
+            'customer' => $customer ? [
+                'name' => $customer->name,
+                'average_rating' => $customer->average_rating !== null ? (float) $customer->average_rating : null,
+                'rating_count' => (int) $customer->rating_count,
+            ] : null,
         ];
     }
 }

@@ -13,6 +13,13 @@ class OrderResource extends JsonResource
             'id' => $this->id,
             'customer_id' => $this->customer_id,
             'partner_id' => $this->partner_id,
+            'customer' => $this->whenLoaded('customer', fn () => [
+                'name' => $this->customer->name,
+                'average_rating' => $this->customer->average_rating !== null
+                    ? (float) $this->customer->average_rating
+                    : null,
+                'rating_count' => (int) $this->customer->rating_count,
+            ]),
             'service_category' => $this->whenLoaded('serviceCategory', fn () => [
                 'slug' => $this->serviceCategory->slug,
                 'name' => $this->serviceCategory->name,

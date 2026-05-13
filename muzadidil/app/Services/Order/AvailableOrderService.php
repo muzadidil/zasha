@@ -38,7 +38,7 @@ class AvailableOrderService
         $servedCategoryIds = ServiceCategory::whereIn('slug', $servedSlugs)->pluck('id', 'slug');
 
         $query = Order::query()
-            ->with('serviceCategory')
+            ->with(['serviceCategory', 'customer'])
             ->where('status', Order::STATUS_SEARCHING)
             ->where('expires_at', '>', now())
             ->whereIn('service_category_id', $servedCategoryIds->values());

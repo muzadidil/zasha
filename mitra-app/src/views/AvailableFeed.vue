@@ -41,6 +41,23 @@ function upsertOrder(entry) {
   else orders.value[idx] = { ...orders.value[idx], ...entry };
 }
 
+function addressFor(o) {
+  const slug = o.service_category?.slug;
+  const d = o.details ?? {};
+  switch (slug) {
+    case 'titip':
+      return [d.pickup_address, d.dropoff_address].filter(Boolean).join(' → ');
+    case 'tenaga':
+      return d.work_address ?? '';
+    case 'service':
+      return d.location_type === 'on_site' ? (d.service_address ?? '') : '(diantar ke tempat mitra)';
+    case 'wfh':
+      return '(remote)';
+    default:
+      return '';
+  }
+}
+
 function subscribeToOrder(echo, orderId) {
   if (orderChannels.has(orderId)) return;
   const ch = echo.channel(`order.${orderId}`);
@@ -57,14 +74,12 @@ function subscribeToOrder(echo, orderId) {
     orderChannels.delete(orderId);
   });
   ch.listen('.OrderPriceUpdated', (e) => {
-    console.log('[mitra] OrderPriceUpdated received:', e, 'orders in feed:', orders.value.map((o) => o.id));
-    const order = orders.value.find((o) => o.id === e.order_id);
-    if (order) {
-      order.current_price = e.current_price;
-      console.log('[mitra] price updated for', e.order_id, '->', e.current_price);
-    } else {
-      console.warn('[mitra] order', e.order_id, 'not found in feed; ignoring price update');
-    }
+    const idx = orders.value.findIndex((o) => o.id === e.order_id);
+    if (idx === -1) return;
+    // Replace the whole entry by index so Vue reliably re-renders the row.
+    // Mutating a nested property on a ref'd array item can be missed when the
+    // item shape came from a spread (which is how upsertOrder builds it).
+    orders.value[idx] = { ...orders.value[idx], current_price: e.current_price };
   });
   orderChannels.set(orderId, ch);
 }
@@ -100,6 +115,7 @@ onMounted(async () => {
       pickup: e.pickup,
       distance_km: e.distance_km,
       expires_at: e.expires_at,
+      customer: e.customer ?? null,
     });
     subscribeToOrder(echo, e.order_id);
     playPing();
@@ -124,16 +140,27 @@ onUnmounted(() => {
     <TransitionGroup v-else name="order-list" tag="ul" class="space-y-2">
       <li v-for="o in orders" :key="o.id" class="order-card bg-slate-800 rounded p-3">
         <div class="flex justify-between items-start gap-3">
-          <div class="flex-1">
+          <div class="flex-1 space-y-1">
             <div class="flex items-center gap-2">
               <span class="text-sm text-slate-400 uppercase">{{ o.service_category?.slug ?? o.service_category?.name }}</span>
               <span v-if="o.distance_km" class="text-xs bg-slate-700 text-amber-300 rounded px-2 py-0.5">
                 {{ o.distance_km }} km
               </span>
             </div>
-            <div class="font-semibold text-lg mt-1">Rp {{ o.current_price.toLocaleString('id-ID') }}</div>
-            <div v-if="o.details?.pickup_address" class="text-xs text-slate-500 mt-1">
-              📍 {{ o.details.pickup_address }}
+
+            <div class="font-semibold text-lg">Rp {{ o.current_price.toLocaleString('id-ID') }}</div>
+
+            <div v-if="o.customer" class="text-sm text-slate-300 flex items-center gap-2">
+              <span>👤 {{ o.customer.name }}</span>
+              <span v-if="o.customer.average_rating !== null" class="text-amber-300 text-xs">
+                ⭐ {{ o.customer.average_rating.toFixed(1) }}
+                <span class="text-slate-500">({{ o.customer.rating_count }})</span>
+              </span>
+              <span v-else class="text-slate-500 text-xs">(belum ada rating)</span>
+            </div>
+
+            <div v-if="addressFor(o)" class="text-xs text-slate-400">
+              📍 {{ addressFor(o) }}
             </div>
           </div>
           <button
