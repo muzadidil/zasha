@@ -12,6 +12,7 @@ const claiming = ref(null);
 const claimedNotice = ref('');
 let privateChannel = null;
 let orderChannels = new Map();
+let pollTimer = null;
 
 let pingAudio = null;
 function playPing() {
@@ -32,6 +33,31 @@ async function load() {
     error.value = e.response?.data?.error?.message ?? 'Gagal memuat order.';
   } finally {
     loading.value = false;
+  }
+}
+
+// Silent reconcile: poll the same endpoint every few seconds, merge prices /
+// add missing orders / drop ones the backend no longer returns. This is the
+// safety net for when Pusher events are slow or a subscription is missed
+// (mitra wouldn't have to reload manually anymore). WS path remains primary;
+// this is purely a fallback.
+async function reconcile() {
+  try {
+    const { data } = await api.get('/partner/orders/available');
+    const fresh = data.data ?? [];
+    const freshIds = new Set(fresh.map((o) => o.id));
+
+    // Drop orders no longer in the available list (claimed/expired/cancelled).
+    orders.value = orders.value.filter((o) => freshIds.has(o.id));
+
+    // Upsert each fresh entry by index so Vue reliably re-renders changed prices.
+    fresh.forEach((entry) => {
+      const idx = orders.value.findIndex((o) => o.id === entry.id);
+      if (idx === -1) orders.value.push(entry);
+      else orders.value[idx] = { ...orders.value[idx], ...entry };
+    });
+  } catch (_) {
+    // Swallow — next tick will retry.
   }
 }
 
@@ -122,11 +148,19 @@ onMounted(async () => {
   });
 
   orders.value.forEach((o) => subscribeToOrder(echo, o.id));
+
+  // Fallback polling — every 5 seconds reconcile against the source of truth
+  // in case Pusher events go missing. Cheap (single HTTP call) and bounded.
+  pollTimer = setInterval(reconcile, 5_000);
 });
 
 onUnmounted(() => {
   privateChannel = null;
   orderChannels.clear();
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
 });
 </script>
 

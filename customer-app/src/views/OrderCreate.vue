@@ -20,19 +20,25 @@ const details = reactive({});
 const skillsInput = ref('');
 
 const category = computed(() => categories.bySlug(selectedSlug.value));
-const prefilledFromReorder = ref(false);
+// Counts how many of the two watchers below still need to skip after a reorder
+// prefill. Both watchers fire on the first selectedSlug assignment; we keep the
+// flag truthy until both have ran so neither can wipe the prefilled state.
+const prefilledFromReorder = ref(0);
 
 watch(category, (c) => {
   if (!c) return;
-  if (prefilledFromReorder.value) {
-    prefilledFromReorder.value = false;
+  if (prefilledFromReorder.value > 0) {
+    prefilledFromReorder.value--;
     return;
   }
   price.value = c.min_price;
 });
 
 watch(selectedSlug, (slug) => {
-  if (prefilledFromReorder.value) return;
+  if (prefilledFromReorder.value > 0) {
+    prefilledFromReorder.value--;
+    return;
+  }
   Object.keys(details).forEach((k) => delete details[k]);
   Object.assign(details, defaultDetails(slug));
 }, { immediate: false });
@@ -45,7 +51,9 @@ onMounted(async () => {
     // Reorder pre-fill: seed details + price BEFORE assigning selectedSlug so the
     // watcher above does not wipe them with defaults / min_price.
     if (route.query.details || route.query.suggested_price) {
-      prefilledFromReorder.value = true;
+      // Both the `category` watcher and the `selectedSlug` watcher will fire
+      // once when we assign selectedSlug below; each one must consume one tick.
+      prefilledFromReorder.value = 2;
       try {
         const parsed = route.query.details ? JSON.parse(route.query.details) : defaultDetails(slug);
         Object.keys(details).forEach((k) => delete details[k]);

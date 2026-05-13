@@ -59,6 +59,22 @@ watch(secondsLeft, (s) => {
   }
 });
 
+// Auto-reorder once we are confident the order really expired (status flipped
+// OR optimistic flip has not been rolled back within the race window). Saves
+// the user one modal click — they wanted the same order with a higher price
+// anyway. Hold for the race window so a late OrderClaimed can still cancel it.
+let autoReorderTimer = null;
+watch([isExpired, isExpiredOptimistic], ([backendExpired, optimistic]) => {
+  if (!backendExpired && !optimistic) return;
+  if (showLateClaimModal.value) return;
+  if (autoReorderTimer) return;
+  const delay = backendExpired ? 600 : RACE_WINDOW_MS;
+  autoReorderTimer = setTimeout(() => {
+    if (showLateClaimModal.value) return;
+    reorder();
+  }, delay);
+});
+
 // Roll back the optimistic expired modal if a late OrderClaimed event arrives
 // within the race window. We rely on the store recording the event time and
 // then re-fetching the order (so partner info is populated).
@@ -144,6 +160,7 @@ onMounted(async () => {
 onUnmounted(() => {
   orderStore.unsubscribe();
   if (tickInterval) clearInterval(tickInterval);
+  if (autoReorderTimer) clearTimeout(autoReorderTimer);
 });
 </script>
 
@@ -221,14 +238,14 @@ onUnmounted(() => {
             <div class="text-4xl">😕</div>
             <h2 class="text-lg font-semibold mt-2">Yah, tidak ada mitra yang mengambil</h2>
             <p class="text-sm text-slate-500 mt-1">
-              Coba naikkan harga supaya lebih banyak mitra tertarik, atau pesan lagi nanti.
+              Form order kamu akan otomatis terbuka lagi dengan harga lebih tinggi…
             </p>
           </div>
           <button @click="reorder" class="w-full bg-indigo-600 text-white rounded py-2.5 font-semibold">
-            Order Ulang dengan harga lebih tinggi
+            Order Ulang Sekarang
           </button>
           <button @click="router.push('/')" class="w-full border border-slate-300 text-slate-700 rounded py-2.5">
-            Kembali ke Home
+            Batal, kembali ke Home
           </button>
         </div>
       </div>
