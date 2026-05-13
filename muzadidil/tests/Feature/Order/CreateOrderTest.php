@@ -51,6 +51,49 @@ it('rejects WFH order without required details', function () {
         ->assertStatus(422);
 });
 
+it('returns per-field WFH validation errors that the frontend can render', function () {
+    $customer = User::factory()->customer()->create();
+
+    $response = $this->actingAs($customer, 'sanctum')
+        ->postJson('/api/customer/orders', [
+            'service_category_slug' => 'wfh',
+            'initial_price' => 50_000,
+            'details' => [
+                'task_title' => 'adfadf',
+                'task_description' => 'adfadf',
+                'deadline' => '2027-10-05T11:11',
+                'skills_required' => [],
+                'attachment_urls' => [],
+            ],
+        ])
+        ->assertStatus(422)
+        ->assertJsonPath('error.code', 'invalid_input');
+
+    $errors = $response->json('error.data.errors');
+    expect($errors)->toHaveKey('details.task_title');
+    expect($errors)->toHaveKey('details.task_description');
+    expect($errors)->toHaveKey('details.skills_required');
+});
+
+it('accepts a WFH order with all required details', function () {
+    $customer = User::factory()->customer()->create();
+
+    $this->actingAs($customer, 'sanctum')
+        ->postJson('/api/customer/orders', [
+            'service_category_slug' => 'wfh',
+            'initial_price' => 50_000,
+            'details' => [
+                'task_title' => 'Landing page Vue minimalis',
+                'task_description' => str_repeat('Saya butuh landing page Vue yang minimalis dan responsif. ', 3),
+                'deadline' => now()->addDays(3)->toIso8601String(),
+                'skills_required' => ['Vue 3', 'Tailwind'],
+                'attachment_urls' => [],
+            ],
+        ])
+        ->assertCreated()
+        ->assertJsonPath('data.status', 'searching');
+});
+
 it('rejects order below category minimum price', function () {
     $customer = User::factory()->customer()->create();
 

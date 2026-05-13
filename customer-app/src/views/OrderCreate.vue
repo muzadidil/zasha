@@ -11,11 +11,13 @@ const categories = useCategoriesStore();
 
 const selectedSlug = ref('');
 const error = ref('');
+const fieldErrors = ref({});
 const submitting = ref(false);
 
 const pickup = ref(null);
 const price = ref(0);
 const details = reactive({});
+const skillsInput = ref('');
 
 const category = computed(() => categories.bySlug(selectedSlug.value));
 
@@ -64,8 +66,21 @@ function onMapClick(e) {
   pickup.value = [e.latlng.lat, e.latlng.lng];
 }
 
+function addSkill() {
+  const v = skillsInput.value.trim();
+  if (!v) return;
+  if (!Array.isArray(details.skills_required)) details.skills_required = [];
+  if (!details.skills_required.includes(v)) details.skills_required.push(v);
+  skillsInput.value = '';
+}
+
+function removeSkill(s) {
+  details.skills_required = (details.skills_required ?? []).filter((x) => x !== s);
+}
+
 async function submit() {
   error.value = '';
+  fieldErrors.value = {};
   submitting.value = true;
   try {
     const payload = {
@@ -79,7 +94,16 @@ async function submit() {
     const { data } = await api.post('/customer/orders', payload);
     router.push(`/orders/${data.data.id}`);
   } catch (e) {
-    error.value = e.response?.data?.error?.message ?? 'Gagal membuat order.';
+    const errs = e.response?.data?.error?.data?.errors;
+    if (errs && typeof errs === 'object') {
+      fieldErrors.value = errs;
+      console.warn('[CreateOrder] validation errors:', errs);
+      const first = Object.values(errs)[0];
+      error.value = Array.isArray(first) ? first[0] : (e.response?.data?.error?.message ?? 'Data yang dikirim tidak valid.');
+    } else {
+      console.warn('[CreateOrder] request failed:', e.response?.data ?? e);
+      error.value = e.response?.data?.error?.message ?? 'Gagal membuat order.';
+    }
   } finally {
     submitting.value = false;
   }
@@ -124,12 +148,37 @@ async function submit() {
 
     <div v-if="selectedSlug" class="bg-white rounded shadow p-4 space-y-2">
       <label class="text-sm text-slate-600">Detail</label>
-      <input v-if="selectedSlug === 'wfh'" v-model="details.task_title" placeholder="Judul tugas"
-             class="w-full border rounded p-2" />
-      <textarea v-if="selectedSlug === 'wfh'" v-model.lazy="details.task_description" placeholder="Deskripsi tugas (min 50 char)"
-                class="w-full border rounded p-2"></textarea>
-      <input v-if="selectedSlug === 'wfh'" v-model="details.deadline" type="datetime-local"
-             class="w-full border rounded p-2" />
+      <template v-if="selectedSlug === 'wfh'">
+        <input v-model="details.task_title" placeholder="Judul tugas (10-200 karakter)"
+               minlength="10" maxlength="200" class="w-full border rounded p-2" />
+        <p v-if="fieldErrors['details.task_title']" class="text-xs text-rose-600">{{ fieldErrors['details.task_title'][0] }}</p>
+
+        <textarea v-model.lazy="details.task_description" placeholder="Deskripsi tugas (min 50 karakter)"
+                  minlength="50" maxlength="5000" rows="4" class="w-full border rounded p-2"></textarea>
+        <p v-if="fieldErrors['details.task_description']" class="text-xs text-rose-600">{{ fieldErrors['details.task_description'][0] }}</p>
+
+        <input v-model="details.deadline" type="datetime-local"
+               class="w-full border rounded p-2" />
+        <p v-if="fieldErrors['details.deadline']" class="text-xs text-rose-600">{{ fieldErrors['details.deadline'][0] }}</p>
+
+        <div>
+          <label class="text-xs text-slate-500">Skill yang dibutuhkan (min 1)</label>
+          <div class="flex gap-2 mt-1">
+            <input v-model="skillsInput" @keydown.enter.prevent="addSkill" placeholder="mis. Laravel"
+                   class="flex-1 border rounded p-2" />
+            <button type="button" @click="addSkill" class="bg-slate-200 rounded px-3">+ Tambah</button>
+          </div>
+          <div v-if="details.skills_required?.length" class="flex flex-wrap gap-1 mt-2">
+            <span v-for="s in details.skills_required" :key="s"
+                  class="bg-indigo-50 text-indigo-700 text-xs rounded px-2 py-1">
+              {{ s }} <button type="button" @click="removeSkill(s)" class="ml-1">×</button>
+            </span>
+          </div>
+          <p v-if="fieldErrors['details.skills_required']" class="text-xs text-rose-600 mt-1">
+            {{ fieldErrors['details.skills_required'][0] }}
+          </p>
+        </div>
+      </template>
 
       <input v-if="selectedSlug === 'titip'" v-model="details.pickup_address" placeholder="Alamat pickup"
              class="w-full border rounded p-2" />
