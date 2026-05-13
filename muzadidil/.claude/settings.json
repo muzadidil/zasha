@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Read(*)",
+      "Edit(*)",
+      "Write(*)",
+      "Glob(*)",
+      "Grep(*)",
+      "Bash(*)",
+      "PowerShell(*)",
+      "Git(*)"
+    ],
+    "additionalDirectories": [
+      "C:\\xampp\\htdocs\\zasha-tower\\.git"
+    ]
+  }
+}
