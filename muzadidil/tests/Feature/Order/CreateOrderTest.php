@@ -154,6 +154,42 @@ it('increases price by category step', function () {
         ->assertJsonPath('data.current_price', 20_000); // 15k + step 5k for titip
 });
 
+it('broadcasts OrderPriceUpdated on order.{id} channel when customer increases price', function () {
+    \Illuminate\Support\Facades\Event::fake([\App\Events\OrderPriceUpdated::class]);
+
+    $customer = User::factory()->customer()->create();
+    $this->actingAs($customer, 'sanctum')
+        ->postJson('/api/customer/orders', [
+            'service_category_slug' => 'titip',
+            'initial_price' => 15_000,
+            'pickup_lat' => -6.2,
+            'pickup_lng' => 106.8,
+            'details' => [
+                'pickup_address' => 'a',
+                'dropoff_address' => 'b',
+                'estimated_weight' => 1,
+                'items' => [['name' => 'x', 'qty' => 1]],
+            ],
+        ]);
+
+    $order = Order::first();
+
+    $this->actingAs($customer, 'sanctum')
+        ->patchJson("/api/customer/orders/{$order->id}/increase-price")
+        ->assertOk();
+
+    \Illuminate\Support\Facades\Event::assertDispatched(\App\Events\OrderPriceUpdated::class, function ($e) use ($order) {
+        $channels = collect($e->broadcastOn())->map->name->all();
+        expect($channels)->toContain("order.{$order->id}");
+        expect($e->broadcastWith())->toMatchArray([
+            'order_id' => $order->id,
+            'current_price' => 20_000,
+        ]);
+
+        return $e->order->id === $order->id;
+    });
+});
+
 it('lets customer cancel a searching order', function () {
     $customer = User::factory()->customer()->create();
     $this->actingAs($customer, 'sanctum')

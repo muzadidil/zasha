@@ -57,8 +57,14 @@ function subscribeToOrder(echo, orderId) {
     orderChannels.delete(orderId);
   });
   ch.listen('.OrderPriceUpdated', (e) => {
+    console.log('[mitra] OrderPriceUpdated received:', e, 'orders in feed:', orders.value.map((o) => o.id));
     const order = orders.value.find((o) => o.id === e.order_id);
-    if (order) order.current_price = e.current_price;
+    if (order) {
+      order.current_price = e.current_price;
+      console.log('[mitra] price updated for', e.order_id, '->', e.current_price);
+    } else {
+      console.warn('[mitra] order', e.order_id, 'not found in feed; ignoring price update');
+    }
   });
   orderChannels.set(orderId, ch);
 }
