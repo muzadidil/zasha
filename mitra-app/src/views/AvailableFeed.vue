@@ -115,8 +115,8 @@ onUnmounted(() => {
     <p v-if="claimedNotice" class="text-emerald-400 text-sm">{{ claimedNotice }}</p>
     <p v-if="loading" class="text-slate-400">Memuat…</p>
     <p v-else-if="!orders.length" class="text-slate-400">Belum ada order di area kamu.</p>
-    <ul v-else class="space-y-2">
-      <li v-for="o in orders" :key="o.id" class="bg-slate-800 rounded p-3">
+    <TransitionGroup v-else name="order-list" tag="ul" class="space-y-2">
+      <li v-for="o in orders" :key="o.id" class="order-card bg-slate-800 rounded p-3">
         <div class="flex justify-between items-start gap-3">
           <div class="flex-1">
             <div class="flex items-center gap-2">
@@ -137,6 +137,24 @@ onUnmounted(() => {
           >{{ claiming === o.id ? '…' : 'Terima' }}</button>
         </div>
       </li>
-    </ul>
+    </TransitionGroup>
   </div>
 </template>
+
+<style scoped>
+.order-card {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.order-list-enter-from {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+.order-list-leave-to {
+  opacity: 0;
+  transform: translateX(20px);
+}
+.order-list-leave-active {
+  position: absolute;
+  width: 100%;
+}
+</style>

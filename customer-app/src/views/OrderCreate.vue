@@ -20,12 +20,19 @@ const details = reactive({});
 const skillsInput = ref('');
 
 const category = computed(() => categories.bySlug(selectedSlug.value));
+const prefilledFromReorder = ref(false);
 
 watch(category, (c) => {
-  if (c) price.value = c.min_price;
+  if (!c) return;
+  if (prefilledFromReorder.value) {
+    prefilledFromReorder.value = false;
+    return;
+  }
+  price.value = c.min_price;
 });
 
 watch(selectedSlug, (slug) => {
+  if (prefilledFromReorder.value) return;
   Object.keys(details).forEach((k) => delete details[k]);
   Object.assign(details, defaultDetails(slug));
 }, { immediate: false });
@@ -33,7 +40,27 @@ watch(selectedSlug, (slug) => {
 onMounted(async () => {
   await categories.load();
   const slug = route.query.slug;
-  if (slug && categories.bySlug(slug)) selectedSlug.value = slug;
+
+  if (slug && categories.bySlug(slug)) {
+    // Reorder pre-fill: seed details + price BEFORE assigning selectedSlug so the
+    // watcher above does not wipe them with defaults / min_price.
+    if (route.query.details || route.query.suggested_price) {
+      prefilledFromReorder.value = true;
+      try {
+        const parsed = route.query.details ? JSON.parse(route.query.details) : defaultDetails(slug);
+        Object.keys(details).forEach((k) => delete details[k]);
+        Object.assign(details, parsed);
+      } catch (_) {
+        Object.assign(details, defaultDetails(slug));
+      }
+      if (route.query.suggested_price) {
+        const suggested = Number(route.query.suggested_price);
+        if (!Number.isNaN(suggested) && suggested > 0) price.value = suggested;
+      }
+    }
+    selectedSlug.value = slug;
+  }
+
   if (route.query.lat && route.query.lng) {
     pickup.value = [Number(route.query.lat), Number(route.query.lng)];
   } else if (navigator.geolocation) {

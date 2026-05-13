@@ -4,12 +4,14 @@ import { useRoute, useRouter } from 'vue-router';
 import api from '../api';
 import OsmMap from '../components/OsmMap.vue';
 import { useAuthStore } from '../stores/auth';
+import { useCategoriesStore } from '../stores/categories';
 import { useOrderStore } from '../stores/order';
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 const orderStore = useOrderStore();
+const categories = useCategoriesStore();
 const error = ref('');
 const acting = ref(false);
 const rating = reactive({ stars: 5, comment: '', submitted: false, error: '' });
@@ -26,6 +28,8 @@ const pickup = computed(() => {
 
 const isSearching = computed(() => order.value?.status === 'searching');
 const isClaimed = computed(() => order.value?.status === 'claimed' || order.value?.status === 'in_progress');
+const isExpired = computed(() => order.value?.status === 'expired');
+const isCancelled = computed(() => order.value?.status === 'cancelled');
 const canRate = computed(() => order.value?.status === 'completed' && !rating.submitted);
 
 const secondsLeft = computed(() => {
@@ -75,9 +79,28 @@ function waLink(phone) {
   return `https://wa.me/${clean}`;
 }
 
+function reorder() {
+  if (!order.value) return;
+  const slug = order.value.service_category?.slug;
+  const cat = categories.bySlug(slug);
+  const step = cat?.price_step ?? 0;
+  const suggested = (order.value.current_price ?? 0) + step;
+  const query = {
+    slug,
+    details: JSON.stringify(order.value.details ?? {}),
+    suggested_price: String(suggested),
+  };
+  if (order.value.pickup) {
+    query.lat = String(order.value.pickup.lat);
+    query.lng = String(order.value.pickup.lng);
+  }
+  router.push({ name: 'orders.create', query });
+}
+
 onMounted(async () => {
   try {
     await orderStore.load(route.params.id);
+    await categories.load();
   } catch (e) {
     error.value = e.response?.data?.error?.message ?? 'Gagal memuat detail order.';
     return;
@@ -157,7 +180,38 @@ onUnmounted(() => {
 
     <p v-if="rating.submitted" class="text-emerald-600 text-sm">Terima kasih, rating sudah dikirim.</p>
     <p v-if="error" class="text-rose-600 text-sm">{{ error }}</p>
+
+    <!-- Expired modal -->
+    <Transition name="fade">
+      <div v-if="isExpired" class="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-lg shadow-xl max-w-sm w-full p-6 space-y-3">
+          <div class="text-center">
+            <div class="text-4xl">😕</div>
+            <h2 class="text-lg font-semibold mt-2">Yah, tidak ada mitra yang mengambil</h2>
+            <p class="text-sm text-slate-500 mt-1">
+              Coba naikkan harga supaya lebih banyak mitra tertarik, atau pesan lagi nanti.
+            </p>
+          </div>
+          <button @click="reorder" class="w-full bg-indigo-600 text-white rounded py-2.5 font-semibold">
+            Order Ulang dengan harga lebih tinggi
+          </button>
+          <button @click="router.push('/')" class="w-full border border-slate-300 text-slate-700 rounded py-2.5">
+            Kembali ke Home
+          </button>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Cancelled banner (lighter, no modal) -->
+    <div v-if="isCancelled" class="bg-rose-50 border border-rose-200 text-rose-700 rounded p-3 text-sm">
+      Order ini dibatalkan.
+    </div>
   </div>
   <p v-else-if="error" class="text-rose-600">{{ error }}</p>
   <p v-else class="text-slate-500">Memuat…</p>
 </template>
+
+<style scoped>
+.fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+</style>
