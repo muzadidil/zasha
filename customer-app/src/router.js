@@ -2,7 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 import { useAuthStore } from './stores/auth';
 
 const routes = [
-  { path: '/', redirect: '/orders' },
+  { path: '/', name: 'home', component: () => import('./views/Home.vue'), meta: { auth: true } },
   { path: '/login', name: 'login', component: () => import('./views/Login.vue') },
   { path: '/register', name: 'register', component: () => import('./views/Register.vue') },
   { path: '/orders', name: 'orders.index', component: () => import('./views/OrderList.vue'), meta: { auth: true } },
@@ -18,7 +18,7 @@ const router = createRouter({
 router.beforeEach((to) => {
   const auth = useAuthStore();
   if (to.meta.auth && !auth.token) return { name: 'login' };
-  if ((to.name === 'login' || to.name === 'register') && auth.token) return { name: 'orders.index' };
+  if ((to.name === 'login' || to.name === 'register') && auth.token) return { name: 'home' };
   return true;
 });
 
