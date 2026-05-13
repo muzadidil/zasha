@@ -38,6 +38,7 @@ Route::middleware(['auth:sanctum', 'role:customer'])
         Route::patch('orders/{id}/increase-price', [CustomerOrderController::class, 'increasePrice'])
             ->middleware('throttle:order-price-increase');
         Route::delete('orders/{id}', [CustomerOrderController::class, 'cancel']);
+        Route::delete('orders/{id}/cancel', [CustomerOrderController::class, 'cancel']);
         Route::post('orders/{id}/rate', [CustomerRatingController::class, 'store']);
     });
 

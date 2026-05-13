@@ -2,7 +2,7 @@
 
 namespace App\Console\Commands;
 
-use App\Events\OrderStatusChanged;
+use App\Events\OrderExpired;
 use App\Models\Order;
 use App\Models\OrderStatusLog;
 use Illuminate\Console\Command;
@@ -31,6 +31,8 @@ class ExpireSearchingOrders extends Command
                         }
                         $previous = $order->status;
                         $order->status = Order::STATUS_EXPIRED;
+                        $order->active_radius_km = null;
+                        $order->current_step_index = null;
                         $order->save();
 
                         OrderStatusLog::create([
@@ -41,7 +43,7 @@ class ExpireSearchingOrders extends Command
                             'reason' => 'timeout',
                         ]);
 
-                        broadcast(new OrderStatusChanged($order))->toOthers();
+                        broadcast(new OrderExpired($order->fresh()));
                     });
                     $expired++;
                 }

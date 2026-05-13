@@ -2,7 +2,7 @@
 
 namespace App\Services\Order;
 
-use App\Events\OrderCreated;
+use App\Events\OrderCancelled;
 use App\Events\OrderPriceUpdated;
 use App\Events\OrderStatusChanged;
 use App\Exceptions\Order\OrderException;
@@ -14,6 +14,11 @@ use Illuminate\Support\Facades\DB;
 
 class OrderService
 {
+    public function __construct(
+        private readonly OrderBroadcastService $broadcastService,
+    ) {
+    }
+
     public function create(User $customer, array $data): Order
     {
         $category = ServiceCategory::where('slug', $data['service_category_slug'])->firstOrFail();
@@ -51,7 +56,7 @@ class OrderService
             // Initial draft is auto-promoted to searching as part of submission.
             OrderStateMachine::transition($order, Order::STATUS_SEARCHING, changedBy: $customer->id);
 
-            broadcast(new OrderCreated($order->refresh()))->toOthers();
+            $this->broadcastService->startStagedBroadcast($order->fresh());
 
             return $order->fresh();
         });
@@ -91,8 +96,12 @@ class OrderService
         }
 
         return DB::transaction(function () use ($order, $actor, $reason) {
+            $order->active_radius_km = null;
+            $order->current_step_index = null;
+            $order->save();
+
             OrderStateMachine::transition($order, Order::STATUS_CANCELLED, changedBy: $actor->id, reason: $reason);
-            broadcast(new OrderStatusChanged($order))->toOthers();
+            broadcast(new OrderCancelled($order->fresh()));
 
             return $order->fresh();
         });

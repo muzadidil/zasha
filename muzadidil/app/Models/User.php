@@ -29,6 +29,8 @@ class User extends Authenticatable
         'role',
         'phone_verified_at',
         'email_verified_at',
+        'blocked_at',
+        'blocked_reason',
     ];
 
     protected $hidden = [
@@ -41,9 +43,15 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'phone_verified_at' => 'datetime',
+            'blocked_at' => 'datetime',
             'password' => 'hashed',
             'average_rating' => 'decimal:2',
         ];
+    }
+
+    public function isBlocked(): bool
+    {
+        return $this->blocked_at !== null;
     }
 
     public function isCustomer(): bool

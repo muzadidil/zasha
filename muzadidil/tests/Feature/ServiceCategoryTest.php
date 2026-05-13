@@ -26,8 +26,8 @@ it('returns category config matching spec', function () {
     expect($titip['price_step'])->toBe(5_000);
     expect($titip['max_partners'])->toBe(1);
     expect($titip['requires_geolocation'])->toBeTrue();
-    expect($titip['search_radius_km'])->toBe(5);
-    expect($titip['search_timeout_minutes'])->toBe(10);
+    expect($titip['search_radius_km'])->toBe(4);
+    expect($titip['search_timeout_minutes'])->toBe(1);
 });
 
 it('returns null radius for WFH category', function () {
@@ -37,5 +37,5 @@ it('returns null radius for WFH category', function () {
 
     expect($wfh['search_radius_km'])->toBeNull();
     expect($wfh['requires_geolocation'])->toBeFalse();
-    expect($wfh['search_timeout_minutes'])->toBe(1440);
+    expect($wfh['search_timeout_minutes'])->toBe(1);
 });

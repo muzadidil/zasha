@@ -18,6 +18,8 @@ class ServiceCategoryResource extends JsonResource
             'max_partners' => $this->max_partners,
             'requires_geolocation' => $this->requires_geolocation,
             'search_radius_km' => $this->search_radius_km,
+            'radius_steps' => $this->radius_steps,
+            'step_duration_seconds' => $this->step_duration_seconds,
             'search_timeout_minutes' => $this->search_timeout_minutes,
             'commission_percent' => (float) $this->commission_percent,
         ];

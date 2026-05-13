@@ -101,6 +101,8 @@ class OrderClaimService
             if ($becomesClaimed) {
                 $order->partner_id = $partner->id;
                 $order->claimed_at = now();
+                $order->active_radius_km = null;
+                $order->current_step_index = null;
                 $order->save();
                 OrderStateMachine::transition($order, Order::STATUS_CLAIMED, changedBy: $partner->id);
             }

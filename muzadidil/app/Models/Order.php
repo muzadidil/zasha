@@ -41,6 +41,8 @@ class Order extends Model
         'current_price',
         'initial_price',
         'status',
+        'active_radius_km',
+        'current_step_index',
         'expires_at',
         'claimed_at',
         'completed_at',
@@ -52,6 +54,8 @@ class Order extends Model
             'details' => 'array',
             'current_price' => 'integer',
             'initial_price' => 'integer',
+            'active_radius_km' => 'integer',
+            'current_step_index' => 'integer',
             'expires_at' => 'datetime',
             'claimed_at' => 'datetime',
             'completed_at' => 'datetime',
@@ -91,6 +95,11 @@ class Order extends Model
     public function ratings(): HasMany
     {
         return $this->hasMany(Rating::class);
+    }
+
+    public function radiusExpansions(): HasMany
+    {
+        return $this->hasMany(OrderRadiusExpansion::class);
     }
 
     /**

@@ -26,6 +26,8 @@ class ServiceCategory extends Model
         'max_partners',
         'requires_geolocation',
         'search_radius_km',
+        'radius_steps',
+        'step_duration_seconds',
         'search_timeout_minutes',
         'commission_percent',
     ];
@@ -38,6 +40,8 @@ class ServiceCategory extends Model
             'max_partners' => 'integer',
             'requires_geolocation' => 'boolean',
             'search_radius_km' => 'integer',
+            'radius_steps' => 'array',
+            'step_duration_seconds' => 'integer',
             'search_timeout_minutes' => 'integer',
             'commission_percent' => 'decimal:2',
         ];
