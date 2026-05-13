@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Build output
+dist/
+build/
+public/build/
+public/hot
+public/storage
+
+# Laravel
+muzadidil/.env
+muzadidil/.env.backup
+muzadidil/.env.production
+muzadidil/storage/*.key
+muzadidil/storage/logs/*
+!muzadidil/storage/logs/.gitkeep
+muzadidil/storage/framework/cache/data/*
+muzadidil/storage/framework/sessions/*
+muzadidil/storage/framework/testing/*
+muzadidil/storage/framework/views/*
+muzadidil/storage/app/public/*
+!muzadidil/storage/app/public/.gitkeep
+muzadidil/bootstrap/cache/*.php
+muzadidil/.phpunit.result.cache
+muzadidil/Homestead.json
+muzadidil/Homestead.yaml
+muzadidil/auth.json
+muzadidil/database/*.sqlite
+
+# Vue / Vite
+customer-app/.env.local
+customer-app/.env.*.local
+mitra-app/.env.local
+mitra-app/.env.*.local
+
+# Editor / OS
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+*.swp
+*.log
+npm-debug.log*
+
+# Claude
+.claude/settings.local.json
