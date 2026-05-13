@@ -1,10 +1,14 @@
 <script setup>
 import { reactive, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { RouterLink, useRouter } from 'vue-router';
+import BaseButton from '../components/ui/BaseButton.vue';
+import BaseInput from '../components/ui/BaseInput.vue';
+import { useToast } from '../composables/useToast';
 import { useAuthStore } from '../stores/auth';
 
 const auth = useAuthStore();
 const router = useRouter();
+const toast = useToast();
 const form = reactive({
   name: '',
   phone: '',
@@ -12,17 +16,22 @@ const form = reactive({
   password: '',
   password_confirmation: '',
 });
-const error = ref('');
+const errors = reactive({});
 const loading = ref(false);
 
 async function submit() {
-  error.value = '';
+  Object.keys(errors).forEach((k) => delete errors[k]);
   loading.value = true;
   try {
     await auth.register(form);
-    router.push({ name: 'orders.index' });
+    toast.success('Akun berhasil dibuat');
+    router.push({ name: 'home' });
   } catch (e) {
-    error.value = e.response?.data?.error?.message ?? 'Pendaftaran gagal.';
+    const errs = e.response?.data?.error?.data?.errors;
+    if (errs && typeof errs === 'object') {
+      Object.assign(errors, errs);
+    }
+    toast.error(e.response?.data?.error?.message ?? 'Pendaftaran gagal');
   } finally {
     loading.value = false;
   }
@@ -30,18 +39,31 @@ async function submit() {
 </script>
 
 <template>
-  <div class="bg-white shadow rounded-lg p-6 max-w-md mx-auto">
-    <h1 class="text-xl font-semibold mb-4">Daftar Akun Pelanggan</h1>
-    <form @submit.prevent="submit" class="space-y-3">
-      <input v-model="form.name" required placeholder="Nama lengkap" class="w-full border rounded px-3 py-2" />
-      <input v-model="form.phone" required placeholder="Nomor telepon" class="w-full border rounded px-3 py-2" />
-      <input v-model="form.email" type="email" placeholder="Email (opsional)" class="w-full border rounded px-3 py-2" />
-      <input v-model="form.password" type="password" required placeholder="Password" class="w-full border rounded px-3 py-2" />
-      <input v-model="form.password_confirmation" type="password" required placeholder="Ulangi password" class="w-full border rounded px-3 py-2" />
-      <p v-if="error" class="text-rose-600 text-sm">{{ error }}</p>
-      <button :disabled="loading" class="w-full bg-indigo-600 text-white rounded py-2 disabled:opacity-50">
-        {{ loading ? 'Memproses…' : 'Daftar' }}
-      </button>
-    </form>
+  <div class="min-h-screen bg-slate-50 flex flex-col">
+    <div class="bg-gradient-to-br from-brand-600 to-violet-600 text-white px-6 pt-12 pb-10 rounded-b-3xl">
+      <div class="max-w-md mx-auto">
+        <h1 class="text-2xl font-bold">Daftar akun baru</h1>
+        <p class="text-sm text-white/80 mt-1">Mulai pakai Zasha dalam 30 detik.</p>
+      </div>
+    </div>
+
+    <div class="-mt-6 px-5 flex-1 pb-8">
+      <div class="max-w-md mx-auto bg-white rounded-card shadow-card p-5 space-y-3">
+        <form @submit.prevent="submit" class="space-y-3">
+          <BaseInput v-model="form.name" label="Nama lengkap" :error="errors.name?.[0]" required />
+          <BaseInput v-model="form.phone" label="Nomor telepon" type="tel" autocomplete="tel" :error="errors.phone?.[0]" required />
+          <BaseInput v-model="form.email" label="Email (opsional)" type="email" autocomplete="email" :error="errors.email?.[0]" />
+          <BaseInput v-model="form.password" label="Password" type="password" autocomplete="new-password" :error="errors.password?.[0]" required />
+          <BaseInput v-model="form.password_confirmation" label="Ulangi password" type="password" autocomplete="new-password" required />
+
+          <BaseButton type="submit" :loading="loading" block size="lg">Daftar Sekarang</BaseButton>
+        </form>
+      </div>
+
+      <p class="text-center text-sm text-ink-soft mt-6">
+        Sudah punya akun?
+        <RouterLink to="/login" class="text-brand-600 font-semibold">Masuk</RouterLink>
+      </p>
+    </div>
   </div>
 </template>

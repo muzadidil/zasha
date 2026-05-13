@@ -1,6 +1,6 @@
 <script setup>
-import 'leaflet/dist/leaflet.css';
-import { LMap, LTileLayer, LMarker, LCircle } from '@vue-leaflet/vue-leaflet';
+import { defineAsyncComponent, defineProps } from 'vue';
+import LoadingSpinner from './ui/LoadingSpinner.vue';
 
 const props = defineProps({
   center: { type: Array, default: () => [-6.2, 106.8] },
@@ -9,28 +9,31 @@ const props = defineProps({
   partner: { type: Array, default: null },
   radiusKm: { type: Number, default: null },
   height: { type: String, default: '320px' },
+  showPulse: { type: Boolean, default: false },
 });
 
 defineEmits(['click']);
+
+// Lazy-load the heavy Leaflet bundle (~150KB) so Home + simple screens don't
+// pull it in. Loaded the moment the user reaches a screen that mounts OsmMap.
+const OsmMapInner = defineAsyncComponent({
+  loader: () => import('./OsmMapInner.vue'),
+  loadingComponent: LoadingSpinner,
+  delay: 100,
+  timeout: 8000,
+});
 </script>
 
 <template>
-  <div :style="{ height }" class="rounded overflow-hidden border border-slate-200">
-    <l-map :zoom="zoom" :center="center" :use-global-leaflet="false" @click="$emit('click', $event)">
-      <l-tile-layer
-        url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-        attribution="&copy; OpenStreetMap"
-      />
-      <l-marker v-if="pickup" :lat-lng="pickup" />
-      <l-marker v-if="partner" :lat-lng="partner" />
-      <l-circle
-        v-if="pickup && radiusKm"
-        :lat-lng="pickup"
-        :radius="radiusKm * 1000"
-        :color="'#4f46e5'"
-        :fill-color="'#6366f1'"
-        :fill-opacity="0.12"
-      />
-    </l-map>
+  <div :style="{ height }" class="rounded-card overflow-hidden border border-slate-200 bg-slate-100 relative">
+    <OsmMapInner
+      :center="center"
+      :zoom="zoom"
+      :pickup="pickup"
+      :partner="partner"
+      :radius-km="radiusKm"
+      :show-pulse="showPulse"
+      @click="$emit('click', $event)"
+    />
   </div>
 </template>

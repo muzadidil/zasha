@@ -1,16 +1,23 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { MinusIcon, PlusIcon, XMarkIcon } from '@heroicons/vue/24/outline';
 import api from '../api';
 import OsmMap from '../components/OsmMap.vue';
+import AppHeader from '../components/ui/AppHeader.vue';
+import BaseButton from '../components/ui/BaseButton.vue';
+import BaseCard from '../components/ui/BaseCard.vue';
+import BaseInput from '../components/ui/BaseInput.vue';
+import CategoryIcon from '../components/ui/CategoryIcon.vue';
+import { useToast } from '../composables/useToast';
 import { useCategoriesStore } from '../stores/categories';
 
 const route = useRoute();
 const router = useRouter();
 const categories = useCategoriesStore();
+const toast = useToast();
 
 const selectedSlug = ref('');
-const error = ref('');
 const fieldErrors = ref({});
 const submitting = ref(false);
 
@@ -20,25 +27,17 @@ const details = reactive({});
 const skillsInput = ref('');
 
 const category = computed(() => categories.bySlug(selectedSlug.value));
-// Counts how many of the two watchers below still need to skip after a reorder
-// prefill. Both watchers fire on the first selectedSlug assignment; we keep the
-// flag truthy until both have ran so neither can wipe the prefilled state.
+// See: counter prevents racing watchers from clobbering reorder prefill.
 const prefilledFromReorder = ref(0);
 
 watch(category, (c) => {
   if (!c) return;
-  if (prefilledFromReorder.value > 0) {
-    prefilledFromReorder.value--;
-    return;
-  }
+  if (prefilledFromReorder.value > 0) { prefilledFromReorder.value--; return; }
   price.value = c.min_price;
 });
 
 watch(selectedSlug, (slug) => {
-  if (prefilledFromReorder.value > 0) {
-    prefilledFromReorder.value--;
-    return;
-  }
+  if (prefilledFromReorder.value > 0) { prefilledFromReorder.value--; return; }
   Object.keys(details).forEach((k) => delete details[k]);
   Object.assign(details, defaultDetails(slug));
 }, { immediate: false });
@@ -46,13 +45,8 @@ watch(selectedSlug, (slug) => {
 onMounted(async () => {
   await categories.load();
   const slug = route.query.slug;
-
   if (slug && categories.bySlug(slug)) {
-    // Reorder pre-fill: seed details + price BEFORE assigning selectedSlug so the
-    // watcher above does not wipe them with defaults / min_price.
     if (route.query.details || route.query.suggested_price) {
-      // Both the `category` watcher and the `selectedSlug` watcher will fire
-      // once when we assign selectedSlug below; each one must consume one tick.
       prefilledFromReorder.value = 2;
       try {
         const parsed = route.query.details ? JSON.parse(route.query.details) : defaultDetails(slug);
@@ -62,13 +56,12 @@ onMounted(async () => {
         Object.assign(details, defaultDetails(slug));
       }
       if (route.query.suggested_price) {
-        const suggested = Number(route.query.suggested_price);
-        if (!Number.isNaN(suggested) && suggested > 0) price.value = suggested;
+        const sp = Number(route.query.suggested_price);
+        if (!Number.isNaN(sp) && sp > 0) price.value = sp;
       }
     }
     selectedSlug.value = slug;
   }
-
   if (route.query.lat && route.query.lng) {
     pickup.value = [Number(route.query.lat), Number(route.query.lng)];
   } else if (navigator.geolocation) {
@@ -79,7 +72,11 @@ onMounted(async () => {
 });
 
 function increase() { if (category.value) price.value += category.value.price_step; }
-function decrease() { if (category.value && price.value - category.value.price_step >= category.value.min_price) price.value -= category.value.price_step; }
+function decrease() {
+  if (category.value && price.value - category.value.price_step >= category.value.min_price) {
+    price.value -= category.value.price_step;
+  }
+}
 
 function defaultDetails(slug) {
   switch (slug) {
@@ -113,8 +110,9 @@ function removeSkill(s) {
   details.skills_required = (details.skills_required ?? []).filter((x) => x !== s);
 }
 
+const fieldError = (key) => fieldErrors.value[key]?.[0] ?? '';
+
 async function submit() {
-  error.value = '';
   fieldErrors.value = {};
   submitting.value = true;
   try {
@@ -127,17 +125,16 @@ async function submit() {
         : {}),
     };
     const { data } = await api.post('/customer/orders', payload);
+    toast.success('Order dibuat, mencari mitra…');
     router.push(`/orders/${data.data.id}`);
   } catch (e) {
     const errs = e.response?.data?.error?.data?.errors;
     if (errs && typeof errs === 'object') {
       fieldErrors.value = errs;
-      console.warn('[CreateOrder] validation errors:', errs);
       const first = Object.values(errs)[0];
-      error.value = Array.isArray(first) ? first[0] : (e.response?.data?.error?.message ?? 'Data yang dikirim tidak valid.');
+      toast.error(Array.isArray(first) ? first[0] : 'Periksa kembali isian form.');
     } else {
-      console.warn('[CreateOrder] request failed:', e.response?.data ?? e);
-      error.value = e.response?.data?.error?.message ?? 'Gagal membuat order.';
+      toast.error(e.response?.data?.error?.message ?? 'Gagal membuat order.');
     }
   } finally {
     submitting.value = false;
@@ -146,111 +143,159 @@ async function submit() {
 </script>
 
 <template>
-  <div class="space-y-4">
-    <button class="text-sm text-slate-500" @click="router.back()">← Kembali</button>
-    <h1 class="text-xl font-semibold">{{ category?.name ?? 'Pesan Jasa' }}</h1>
+  <div class="min-h-screen bg-slate-50">
+    <AppHeader :title="category?.name ?? 'Pesan Jasa'" back />
 
-    <div v-if="!selectedSlug" class="bg-white rounded shadow p-4">
-      <label class="text-sm text-slate-600">Kategori</label>
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
-        <button
-          v-for="c in categories.items"
-          :key="c.id"
-          type="button"
-          @click="selectedSlug = c.slug"
-          class="border rounded py-2 text-sm border-slate-200"
-        >{{ c.name }}</button>
-      </div>
-    </div>
-
-    <div v-if="category?.requires_geolocation" class="bg-white rounded shadow p-4 space-y-2">
-      <label class="text-sm text-slate-600">Konfirmasi lokasi pickup</label>
-      <OsmMap :center="pickup ?? [-6.2, 106.8]" :pickup="pickup" @click="onMapClick" height="240px" />
-      <p class="text-xs text-slate-500">Klik di peta untuk geser titik.</p>
-    </div>
-
-    <div v-if="category" class="bg-white rounded shadow p-4">
-      <label class="text-sm text-slate-600">Harga</label>
-      <div class="flex items-center justify-between mt-2">
-        <button type="button" @click="decrease" class="bg-slate-100 rounded-full w-10 h-10 text-xl">−</button>
-        <div class="text-2xl font-semibold">Rp {{ price.toLocaleString('id-ID') }}</div>
-        <button type="button" @click="increase" class="bg-slate-100 rounded-full w-10 h-10 text-xl">+</button>
-      </div>
-      <p class="text-xs text-slate-500 mt-2">
-        Minimum Rp {{ category.min_price.toLocaleString('id-ID') }} · step Rp {{ category.price_step.toLocaleString('id-ID') }}
-      </p>
-    </div>
-
-    <div v-if="selectedSlug" class="bg-white rounded shadow p-4 space-y-2">
-      <label class="text-sm text-slate-600">Detail</label>
-      <template v-if="selectedSlug === 'wfh'">
-        <input v-model="details.task_title" placeholder="Judul tugas (10-200 karakter)"
-               minlength="10" maxlength="200" class="w-full border rounded p-2" />
-        <p v-if="fieldErrors['details.task_title']" class="text-xs text-rose-600">{{ fieldErrors['details.task_title'][0] }}</p>
-
-        <textarea v-model.lazy="details.task_description" placeholder="Deskripsi tugas (min 50 karakter)"
-                  minlength="50" maxlength="5000" rows="4" class="w-full border rounded p-2"></textarea>
-        <p v-if="fieldErrors['details.task_description']" class="text-xs text-rose-600">{{ fieldErrors['details.task_description'][0] }}</p>
-
-        <input v-model="details.deadline" type="datetime-local"
-               class="w-full border rounded p-2" />
-        <p v-if="fieldErrors['details.deadline']" class="text-xs text-rose-600">{{ fieldErrors['details.deadline'][0] }}</p>
-
-        <div>
-          <label class="text-xs text-slate-500">Skill yang dibutuhkan (min 1)</label>
-          <div class="flex gap-2 mt-1">
-            <input v-model="skillsInput" @keydown.enter.prevent="addSkill" placeholder="mis. Laravel"
-                   class="flex-1 border rounded p-2" />
-            <button type="button" @click="addSkill" class="bg-slate-200 rounded px-3">+ Tambah</button>
-          </div>
-          <div v-if="details.skills_required?.length" class="flex flex-wrap gap-1 mt-2">
-            <span v-for="s in details.skills_required" :key="s"
-                  class="bg-indigo-50 text-indigo-700 text-xs rounded px-2 py-1">
-              {{ s }} <button type="button" @click="removeSkill(s)" class="ml-1">×</button>
-            </span>
-          </div>
-          <p v-if="fieldErrors['details.skills_required']" class="text-xs text-rose-600 mt-1">
-            {{ fieldErrors['details.skills_required'][0] }}
-          </p>
+    <div class="max-w-md mx-auto sm:max-w-2xl px-5 py-4 space-y-4">
+      <!-- Category picker (when no slug given) -->
+      <BaseCard v-if="!selectedSlug">
+        <h2 class="text-sm font-semibold text-ink mb-3">Pilih kategori</h2>
+        <div class="grid grid-cols-2 gap-2">
+          <button
+            v-for="c in categories.items"
+            :key="c.id"
+            @click="selectedSlug = c.slug"
+            class="flex items-center gap-2 p-3 rounded-btn border border-slate-200 hover:border-brand-400 hover:bg-brand-50 transition-colors"
+          >
+            <CategoryIcon :slug="c.slug" size="sm" />
+            <span class="text-sm font-semibold">{{ c.name }}</span>
+          </button>
         </div>
-      </template>
+      </BaseCard>
 
-      <input v-if="selectedSlug === 'titip'" v-model="details.pickup_address" placeholder="Alamat pickup"
-             class="w-full border rounded p-2" />
-      <input v-if="selectedSlug === 'titip'" v-model="details.dropoff_address" placeholder="Alamat antar"
-             class="w-full border rounded p-2" />
-      <textarea v-if="selectedSlug === 'titip'" v-model.lazy="details.notes" placeholder="Catatan (opsional)"
-                class="w-full border rounded p-2"></textarea>
+      <!-- Selected category card -->
+      <BaseCard v-if="category" padded>
+        <div class="flex items-center gap-3">
+          <CategoryIcon :slug="category.slug" />
+          <div class="flex-1">
+            <div class="font-semibold text-ink">{{ category.name }}</div>
+            <div class="text-xs text-ink-soft">
+              Mulai Rp {{ category.min_price.toLocaleString('id-ID') }} · timeout {{ category.search_timeout_minutes }} menit
+            </div>
+          </div>
+        </div>
+      </BaseCard>
 
-      <select v-if="selectedSlug === 'tenaga'" v-model="details.job_type" class="w-full border rounded p-2">
-        <option value="angkut">Angkut</option>
-        <option value="bersih">Bersih-bersih</option>
-        <option value="bangunan">Bangunan</option>
-        <option value="kebun">Kebun</option>
-        <option value="lainnya">Lainnya</option>
-      </select>
-      <input v-if="selectedSlug === 'tenaga'" v-model="details.work_address" placeholder="Alamat lokasi kerja"
-             class="w-full border rounded p-2" />
-      <textarea v-if="selectedSlug === 'tenaga'" v-model.lazy="details.description" placeholder="Deskripsi (min 20 char)"
-                class="w-full border rounded p-2"></textarea>
+      <!-- Pickup location map -->
+      <BaseCard v-if="category?.requires_geolocation" padded>
+        <h3 class="text-sm font-semibold text-ink mb-2">Lokasi pickup</h3>
+        <OsmMap :center="pickup ?? [-8.17, 113.70]" :pickup="pickup" :height="'200px'" @click="onMapClick" />
+        <p class="text-xs text-ink-soft mt-2">Klik di peta untuk menggeser titik pickup.</p>
+      </BaseCard>
 
-      <select v-if="selectedSlug === 'service'" v-model="details.service_type" class="w-full border rounded p-2">
-        <option value="elektronik">Elektronik</option>
-        <option value="kendaraan">Kendaraan</option>
-        <option value="perabot">Perabot</option>
-        <option value="plumbing">Plumbing</option>
-        <option value="listrik">Listrik</option>
-        <option value="lainnya">Lainnya</option>
-      </select>
-      <input v-if="selectedSlug === 'service'" v-model="details.device_or_item" placeholder="Barang/perangkat"
-             class="w-full border rounded p-2" />
-      <textarea v-if="selectedSlug === 'service'" v-model.lazy="details.problem_description" placeholder="Deskripsi masalah (min 30 char)"
-                class="w-full border rounded p-2"></textarea>
+      <!-- Price -->
+      <BaseCard v-if="category" padded>
+        <h3 class="text-sm font-semibold text-ink mb-3">Harga tawaran</h3>
+        <div class="flex items-center justify-between bg-slate-50 rounded-card px-3 py-3">
+          <button
+            type="button"
+            @click="decrease"
+            class="w-11 h-11 grid place-items-center bg-white shadow-card rounded-full active:scale-95 transition-transform"
+            aria-label="Turunkan harga"
+          ><MinusIcon class="w-5 h-5 text-ink" /></button>
+
+          <div class="text-center">
+            <div class="text-[10px] uppercase font-semibold text-ink-soft tracking-wide">Tawaran</div>
+            <div class="text-2xl font-bold text-ink mt-0.5">Rp {{ price.toLocaleString('id-ID') }}</div>
+          </div>
+
+          <button
+            type="button"
+            @click="increase"
+            class="w-11 h-11 grid place-items-center bg-brand-600 hover:bg-brand-700 rounded-full active:scale-95 transition-transform"
+            aria-label="Naikkan harga"
+          ><PlusIcon class="w-5 h-5 text-white" /></button>
+        </div>
+        <p class="text-xs text-ink-soft mt-2 text-center">
+          Minimum Rp {{ category.min_price.toLocaleString('id-ID') }} · step Rp {{ category.price_step.toLocaleString('id-ID') }}
+        </p>
+      </BaseCard>
+
+      <!-- WFH detail -->
+      <BaseCard v-if="selectedSlug === 'wfh'" padded>
+        <h3 class="text-sm font-semibold text-ink mb-3">Detail tugas</h3>
+        <div class="space-y-3">
+          <BaseInput v-model="details.task_title" label="Judul tugas (10-200 karakter)" :error="fieldError('details.task_title')" required />
+          <BaseInput v-model="details.task_description" label="Deskripsi tugas (min 50 karakter)" :error="fieldError('details.task_description')" required />
+          <BaseInput v-model="details.deadline" type="datetime-local" label="Deadline" :error="fieldError('details.deadline')" required />
+
+          <div>
+            <label class="text-xs font-semibold text-ink-soft">Skill yang dibutuhkan</label>
+            <div class="flex gap-2 mt-1.5">
+              <input
+                v-model="skillsInput"
+                @keydown.enter.prevent="addSkill"
+                placeholder="mis. Laravel"
+                class="flex-1 h-11 px-3 rounded-btn border border-slate-300 text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+              />
+              <BaseButton type="button" variant="secondary" size="md" @click="addSkill">Tambah</BaseButton>
+            </div>
+            <div v-if="details.skills_required?.length" class="flex flex-wrap gap-1.5 mt-2">
+              <span v-for="s in details.skills_required" :key="s" class="inline-flex items-center gap-1 bg-brand-50 text-brand-700 text-xs rounded-full px-2.5 py-1">
+                {{ s }}
+                <button type="button" @click="removeSkill(s)" class="hover:text-brand-900"><XMarkIcon class="w-3 h-3" /></button>
+              </span>
+            </div>
+            <p v-if="fieldError('details.skills_required')" class="text-xs text-rose-600 mt-1">{{ fieldError('details.skills_required') }}</p>
+          </div>
+        </div>
+      </BaseCard>
+
+      <!-- Titip detail -->
+      <BaseCard v-if="selectedSlug === 'titip'" padded>
+        <h3 class="text-sm font-semibold text-ink mb-3">Detail titip</h3>
+        <div class="space-y-3">
+          <BaseInput v-model="details.pickup_address" label="Alamat pickup" :error="fieldError('details.pickup_address')" required />
+          <BaseInput v-model="details.dropoff_address" label="Alamat antar" :error="fieldError('details.dropoff_address')" required />
+          <BaseInput v-model="details.notes" label="Catatan (opsional)" :error="fieldError('details.notes')" />
+        </div>
+      </BaseCard>
+
+      <!-- Tenaga detail -->
+      <BaseCard v-if="selectedSlug === 'tenaga'" padded>
+        <h3 class="text-sm font-semibold text-ink mb-3">Detail pekerjaan</h3>
+        <div class="space-y-3">
+          <div>
+            <label class="text-xs font-semibold text-ink-soft">Jenis pekerjaan</label>
+            <select v-model="details.job_type" class="mt-1 w-full h-12 px-3 rounded-btn border border-slate-300 text-sm bg-white">
+              <option value="angkut">Angkut</option>
+              <option value="bersih">Bersih-bersih</option>
+              <option value="bangunan">Bangunan</option>
+              <option value="kebun">Kebun</option>
+              <option value="lainnya">Lainnya</option>
+            </select>
+          </div>
+          <BaseInput v-model="details.work_address" label="Alamat lokasi" :error="fieldError('details.work_address')" required />
+          <BaseInput v-model="details.description" label="Deskripsi (min 20 karakter)" :error="fieldError('details.description')" required />
+        </div>
+      </BaseCard>
+
+      <!-- Service detail -->
+      <BaseCard v-if="selectedSlug === 'service'" padded>
+        <h3 class="text-sm font-semibold text-ink mb-3">Detail service</h3>
+        <div class="space-y-3">
+          <div>
+            <label class="text-xs font-semibold text-ink-soft">Jenis service</label>
+            <select v-model="details.service_type" class="mt-1 w-full h-12 px-3 rounded-btn border border-slate-300 text-sm bg-white">
+              <option value="elektronik">Elektronik</option>
+              <option value="kendaraan">Kendaraan</option>
+              <option value="perabot">Perabot</option>
+              <option value="plumbing">Plumbing</option>
+              <option value="listrik">Listrik</option>
+              <option value="lainnya">Lainnya</option>
+            </select>
+          </div>
+          <BaseInput v-model="details.device_or_item" label="Barang / perangkat" :error="fieldError('details.device_or_item')" required />
+          <BaseInput v-model="details.problem_description" label="Deskripsi masalah (min 30 karakter)" :error="fieldError('details.problem_description')" required />
+        </div>
+      </BaseCard>
+
+      <!-- Submit -->
+      <div v-if="selectedSlug" class="sticky bottom-4 z-10 pt-2">
+        <BaseButton :loading="submitting" :disabled="submitting" block size="lg" @click="submit">
+          {{ submitting ? 'Mengirim…' : 'Cari mitra sekarang' }}
+        </BaseButton>
+      </div>
     </div>
-
-    <p v-if="error" class="text-rose-600 text-sm">{{ error }}</p>
-    <button @click="submit" :disabled="submitting || !selectedSlug" class="w-full bg-indigo-600 text-white rounded py-3 disabled:opacity-50">
-      {{ submitting ? 'Mengirim…' : 'Cari Mitra' }}
-    </button>
   </div>
 </template>

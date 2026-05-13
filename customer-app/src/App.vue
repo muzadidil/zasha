@@ -1,40 +1,50 @@
 <script setup>
-import { computed } from 'vue';
-import { RouterLink, RouterView, useRouter } from 'vue-router';
+import { computed, markRaw } from 'vue';
+import { RouterView, useRoute } from 'vue-router';
+import { HomeIcon, ListBulletIcon, UserIcon, BoltIcon } from '@heroicons/vue/24/outline';
+import BottomTab from './components/ui/BottomTab.vue';
+import Toast from './components/ui/Toast.vue';
 import { useAuthStore } from './stores/auth';
 
 const auth = useAuthStore();
-const router = useRouter();
-const userName = computed(() => auth.user?.name ?? null);
+const route = useRoute();
 
-async function handleLogout() {
-  await auth.logout();
-  router.push({ name: 'login' });
-}
+// Bottom-tab is hidden on auth pages + full-screen detail/searching screens.
+const HIDDEN_ON = new Set(['login', 'register', 'orders.show', 'orders.create']);
+const showTabs = computed(() => auth.token && !HIDDEN_ON.has(route.name));
+
+const tabs = [
+  { name: 'home', label: 'Beranda', route: 'home', icon: markRaw(HomeIcon) },
+  { name: 'active', label: 'Order Aktif', route: 'orders.active', icon: markRaw(BoltIcon) },
+  { name: 'history', label: 'Riwayat', route: 'orders.index', icon: markRaw(ListBulletIcon) },
+  { name: 'profile', label: 'Profil', route: 'profile', icon: markRaw(UserIcon) },
+];
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col">
-    <header class="bg-white shadow-sm">
-      <div class="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
-        <RouterLink to="/" class="font-semibold text-lg text-indigo-700">Zasha Pelanggan</RouterLink>
-        <nav class="text-sm space-x-3">
-          <template v-if="auth.token">
-            <RouterLink to="/orders" class="text-slate-600 hover:text-indigo-700">Order Saya</RouterLink>
-            <RouterLink to="/orders/new" class="text-slate-600 hover:text-indigo-700">Pesan Jasa</RouterLink>
-            <span class="text-slate-400">|</span>
-            <span class="text-slate-500">{{ userName }}</span>
-            <button @click="handleLogout" class="text-rose-600 hover:underline">Keluar</button>
-          </template>
-          <template v-else>
-            <RouterLink to="/login" class="text-slate-600 hover:text-indigo-700">Masuk</RouterLink>
-            <RouterLink to="/register" class="text-slate-600 hover:text-indigo-700">Daftar</RouterLink>
-          </template>
-        </nav>
-      </div>
-    </header>
-    <main class="flex-1 max-w-3xl w-full mx-auto px-4 py-6">
-      <RouterView />
+  <div class="min-h-full bg-slate-50">
+    <main :class="['min-h-screen', showTabs ? 'pb-20' : '']">
+      <RouterView v-slot="{ Component }">
+        <transition name="page" mode="out-in">
+          <component :is="Component" />
+        </transition>
+      </RouterView>
     </main>
+    <BottomTab v-if="showTabs" :items="tabs" />
+    <Toast />
   </div>
 </template>
+
+<style>
+.page-enter-active, .page-leave-active {
+  transition: opacity 180ms ease, transform 200ms ease;
+}
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(4px);
+}
+.page-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+</style>

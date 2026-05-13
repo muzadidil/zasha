@@ -6,6 +6,7 @@ const routes = [
   { path: '/login', name: 'login', component: () => import('./views/Login.vue') },
   { path: '/register', name: 'register', component: () => import('./views/Register.vue') },
   { path: '/available', name: 'available', component: () => import('./views/AvailableFeed.vue'), meta: { auth: true } },
+  { path: '/in-progress', name: 'in-progress', component: () => import('./views/InProgress.vue'), meta: { auth: true } },
   { path: '/wallet', name: 'wallet', component: () => import('./views/Wallet.vue'), meta: { auth: true } },
   { path: '/profile', name: 'profile', component: () => import('./views/Profile.vue'), meta: { auth: true } },
 ];
