@@ -30,8 +30,10 @@ muzadidil/auth.json
 muzadidil/database/*.sqlite
 
 # Vue / Vite
+customer-app/.env
 customer-app/.env.local
 customer-app/.env.*.local
+mitra-app/.env
 mitra-app/.env.local
 mitra-app/.env.*.local
 
